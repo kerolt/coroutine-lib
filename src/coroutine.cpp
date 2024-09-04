@@ -6,6 +6,7 @@
 #include <cstdlib>
 #include <atomic>
 #include <iostream>
+#include "scheduler.h"
 
 static thread_local Coroutine* cur_coroutine = nullptr;
 static thread_local Coroutine::Ptr main_coroutine = nullptr;
@@ -69,7 +70,10 @@ void Coroutine::Yield() {
         state_ = READY;
     }
     if (is_run_in_sched_) {
-        // TODO sheduler
+        if (swapcontext(&ctx_, &(Scheduler::GetSchedCoroutine()->ctx_)) != 0) {
+            std::cout << "err: Yield::swapcontext\n";
+            assert(false);
+        }
     } else {
         if (swapcontext(&ctx_, &(main_coroutine->ctx_)) < 0) {
             std::cout << "err: Yield::swapcontext\n";
@@ -85,7 +89,10 @@ void Coroutine::Resume() {
     SetNowCoroutine(this);
     state_ = RUNNING;
     if (is_run_in_sched_) {
-        // TODO sheduler
+        if (swapcontext(&(Scheduler::GetSchedCoroutine()->ctx_), &ctx_) != 0) {
+            std::cout << "err: Resume::swapcontext\n";
+            assert(false);
+        }
     } else {
         if (swapcontext(&(main_coroutine->ctx_), &ctx_) != 0) {
             std::cout << "err: Resume::swapcontext\n";
