@@ -13,3 +13,7 @@ target("test_coroutine")
 target("test_scheduler")
     set_kind("binary")
     add_files("test/test_scheduler.cpp", "src/coroutine.cpp", "src/scheduler.cpp")
+
+target("test_iomanager")
+    set_kind("binary")
+    add_files("test/test_iomanager.cpp", "src/coroutine.cpp", "src/scheduler.cpp", "src/iomanager.cpp")
