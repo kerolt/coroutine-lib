@@ -54,7 +54,7 @@ public:
     void Stop();
 
     template <typename TaskType>
-    void Sched(TaskType t, ThreadIdPtr id = nullptr) requires(std::is_function_v<std::remove_reference_t<TaskType>> || std::is_same_v<TaskType, Coroutine::Ptr>) {
+    void Sched(TaskType t, ThreadIdPtr id = nullptr) requires(std::invocable<TaskType> || std::same_as<TaskType, Coroutine::Ptr>) {
         bool is_need_tick = false;
 
         {
@@ -67,7 +67,7 @@ public:
         }
 
         if (is_need_tick) {
-            Tick();
+            Tickle();
         }
     }
 
@@ -77,15 +77,19 @@ public:
     static Coroutine* GetSchedCoroutine();
 
 protected:
-    void Tick();
+    virtual void Tickle();
 
     void Run();
 
     void SetThisAsScheduler();
 
-    void Idle();
+    virtual void Idle();
 
-    bool IsStop();
+    virtual bool IsStop();
+
+    bool HasIdleThreads() {
+        return idle_threads_ > 0;
+    }
 
 private:
     std::string name_;

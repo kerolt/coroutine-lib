@@ -1,14 +1,16 @@
 #include "scheduler.h"
 
 #include <cassert>
+#include <sys/syscall.h>
+
 #include <functional>
 #include <mutex>
-#include <sys/syscall.h>
 #include <thread>
 #include <unistd.h>
 #include <memory>
-#include <iostream>
+
 #include "coroutine.h"
+#include "util.h"
 
 namespace {
 thread_local Scheduler* scheduler = nullptr;       // 当前线程的调度器
@@ -51,17 +53,17 @@ Scheduler::~Scheduler() {
 // 调度器开始，线程池创建子线程
 // 一但子线程创建就开始从任务队列取任务执行
 void Scheduler::Start() {
-    std::cout << "Scheduler Start\n";
+    LOG << "Scheduler Start\n";
     std::lock_guard lock(mutex_);
     if (is_stop_) {
-        std::cout << "Scheduler has stop...\n";
+        LOG << "Scheduler has stop...\n";
         return;
     }
     thread_pool_.resize(threads_size_);
     thread_ids_.resize(threads_size_);
     for (int i = 0; i < threads_size_; i++) {
         thread_pool_[i] = std::thread([this] { this->Run(); });
-        thread_ids_[i] = thread_pool_[i].get_id();
+        thread_ids_.push_back(thread_pool_[i].get_id());
     }
 }
 
@@ -75,6 +77,13 @@ void Scheduler::Stop() {
         assert(GetScheduler() == this);
     } else {
         assert(GetScheduler() != this);
+    }
+
+    for (size_t i = 0; i < threads_size_; i++) {
+        Tickle();
+    }
+    if (sched_co_) {
+        Tickle();
     }
 
     // 如果use_caller为true时，其调度协程将会在Stop()中才会开始调度任务，而不像其他的调度线程在创建时就开始进行任务的调度
@@ -96,7 +105,7 @@ void Scheduler::SetThisAsScheduler() {
     scheduler = this;
 }
 
-void Scheduler::Tick() {
+void Scheduler::Tickle() {
 }
 
 void Scheduler::Idle() {
@@ -110,8 +119,9 @@ bool Scheduler::IsStop() {
     return is_stop_ && tasks_.empty() && active_threads_ == 0;
 }
 
+// 用于协程的调度
 void Scheduler::Run() {
-    std::cout << "Scheduler running...\n";
+    LOG << "Scheduler running...\n";
     SetThisAsScheduler();
 
     // 如果当前线程不是调度器所在线程，设置调度的协程为当前线程运行的协程
@@ -126,7 +136,7 @@ void Scheduler::Run() {
 
     while (true) {
         task.Reset();
-        // bool tick_other = false;
+        bool tickle = false;
         {
             std::lock_guard lock(mutex_);
             auto iter = tasks_.begin();
@@ -134,10 +144,11 @@ void Scheduler::Run() {
                 // 当前遍历的task已经分配了线程去执行且这个线程不是当前线程，则不用管
                 if (iter->thread_id_ && *iter->thread_id_ != std::this_thread::get_id()) {
                     ++iter;
+                    tickle = true;
                     continue;
                 }
                 if (iter->coroutine_ && iter->coroutine_->GetState() != Coroutine::READY) {
-                    std::cout << "Coroutine task's state should be READY!\n";
+                    LOG << "Coroutine task's state should be READY!\n";
                     assert(false);
                 }
                 task = *iter;
@@ -145,12 +156,14 @@ void Scheduler::Run() {
                 active_threads_++;
                 break;
             }
-            // tick_other |= iter != tasks_.end();
+            // 有任务可以去执行，需要tickle一下
+            tickle |= (iter != tasks_.end());
         }
-        // if (tick_other) {
-        //     Tick();
-        // }
+        if (tickle) {
+            Tickle();
+        }
 
+        // 子协程执行完毕后yield会回到Run()中
         if (task.coroutine_) {
             // 任务类型为协程
             task.coroutine_->Resume();
@@ -167,13 +180,13 @@ void Scheduler::Run() {
         } else {
             // 无任务，任务队列为空
             if (idle_co->GetState() == Coroutine::FINISH) {
-                std::cout << "Idle coroutine finish\n";
+                LOG << "Idle coroutine finish\n";
                 break;
             }
             idle_threads_++;
-            idle_co->Resume();
+            idle_co->Resume(); // Idle最后Yeild时回到这里
             idle_threads_--;
         }
     }
-    std::cout << "Scheduler Run() exit\n";
+    LOG << "Scheduler Run() exit\n";
 }
