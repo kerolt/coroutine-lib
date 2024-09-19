@@ -12,6 +12,7 @@
 
 #include "coroutine.h"
 #include "scheduler.h"
+#include "timer.h"
 
 // 事件：无、读、写
 enum Event {
@@ -42,7 +43,7 @@ struct FdContext {
 };
 
 // IO协程调度
-class IOManager : public Scheduler {
+class IOManager : public Scheduler, public TimerManager {
 public:
     IOManager(size_t threads = 1, bool use_caller = true, const std::string& name = "IOManager");
 
@@ -62,6 +63,8 @@ protected:
     void Idle() override;
 
     void Tickle() override;
+
+    void OnTimerInsertAtFront() override;
 
     bool IsStop() override;
 

@@ -3,6 +3,7 @@
 #include <cassert>
 #include <cerrno>
 #include <cstddef>
+#include <cstdint>
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
@@ -12,7 +13,9 @@
 
 #include <memory>
 #include <mutex>
+#include <algorithm>
 #include <shared_mutex>
+
 #include "coroutine.h"
 #include "scheduler.h"
 #include "util.h"
@@ -105,20 +108,32 @@ void IOManager::Idle() {
     epoll_event events[MAX_EVENTS]{};
 
     while (true) {
-        LOG << "in idle now\n";
+        // LOG << "in idle now\n";
         if (IsStop()) {
             LOG << GetName() << "idle stop now\n";
             break;
         }
 
-        // 没有事件到来时会阻塞在epoll_wait上，超时时间设置为5S
+        uint64_t next_timeout = GetNextTimerInterval();
         int triggered_events;
-        if ((triggered_events = epoll_wait(epfd_, events, MAX_EVENTS, MAX_TIMEOUT)) < 0) {
-            if (errno == EINTR) {
+        do {
+            // 如果时间堆中有超时的定时器，则比较这个超时定时器的下一次触发的时间与MAX_TIMEOUT（5s），选取最小值作为超时时间
+            next_timeout = next_timeout != ~0ull ? std::min(static_cast<int>(next_timeout), MAX_TIMEOUT) : MAX_TIMEOUT;
+
+            // 没有事件到来时会阻塞在epoll_wait上，除非到了超时时间
+            triggered_events = epoll_wait(epfd_, events, MAX_EVENTS, static_cast<int>(next_timeout));
+            if (triggered_events < 0 && errno == EINTR) {
                 continue;
+            } else {
+                break;
             }
-            LOG_ERROR << strerror(errno) << "\n";
-            break;
+        } while (true); // 用while(true)的目的是确保在出现特定错误情况时能够重新尝试执行 epoll_wait
+
+        // 将超时的定时器的回调函数加入调度器
+        // 这些回调函数的作用可能是关闭连接等操作
+        std::vector<std::function<void()>> cbs = GetExpiredCbList();
+        for (auto& cb : cbs) {
+            Sched(cb);
         }
 
         // 处理事件
@@ -192,7 +207,8 @@ void IOManager::Tickle() {
 }
 
 bool IOManager::IsStop() {
-    return pending_evt_cnt_ == 0 && Scheduler::IsStop();
+    // 应该保证所有调度事件都完成了，并且没有剩余的定时器待触发了才能退出
+    return GetNextTimerInterval() == ~0ull && pending_evt_cnt_ == 0 && Scheduler::IsStop();
 }
 
 void IOManager::ResizeContexts(size_t size) {
@@ -367,4 +383,8 @@ bool IOManager::CancelAllEvent(int fd) {
 
     assert(fd_ctx->events == 0);
     return true;
+}
+
+void IOManager::OnTimerInsertAtFront() {
+    Tickle();
 }
