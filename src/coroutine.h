@@ -49,9 +49,9 @@ private:
     Coroutine();
 
 private:
-    uint64_t id_ = 0;
-    uint32_t stack_size_ = 0;
-    State state_ = READY;
+    uint64_t id_;
+    uint32_t stack_size_;
+    State state_ = READY; // 默认初始化时就是READY
     bool is_run_in_sched_;
 
     ucontext_t ctx_;         // 协程上下文

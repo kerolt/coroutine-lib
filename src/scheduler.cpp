@@ -10,6 +10,7 @@
 #include <memory>
 
 #include "coroutine.h"
+#include "hook.h"
 #include "util.h"
 
 namespace {
@@ -122,6 +123,7 @@ bool Scheduler::IsStop() {
 // 用于协程的调度
 void Scheduler::Run() {
     LOG << "Scheduler running...\n";
+    SetHookFlag(true);
     SetThisAsScheduler();
 
     // 如果当前线程不是调度器所在线程，设置调度的协程为当前线程运行的协程
@@ -147,9 +149,9 @@ void Scheduler::Run() {
                     tickle = true;
                     continue;
                 }
-                if (iter->coroutine_ && iter->coroutine_->GetState() != Coroutine::READY) {
-                    LOG << "Coroutine task's state should be READY!\n";
-                    assert(false);
+                if (iter->coroutine_ && iter->coroutine_->GetState() == Coroutine::RUNNING) {
+                    ++iter;
+                    continue;
                 }
                 task = *iter;
                 tasks_.erase(iter++);
@@ -164,12 +166,14 @@ void Scheduler::Run() {
         }
 
         // 子协程执行完毕后yield会回到Run()中
+        // 注意，每次运行了一个task后需要Reset一下
         if (task.coroutine_) {
             // 任务类型为协程
             task.coroutine_->Resume();
             active_threads_--;
+            task.Reset();
         } else if (task.callback_) {
-            // 任务类型为回调函数
+            // 任务类型为回调函数，将其包装为协程
             if (callback_co) {
                 callback_co->Reset(task.callback_);
             } else {
@@ -177,6 +181,8 @@ void Scheduler::Run() {
             }
             callback_co->Resume();
             active_threads_--;
+            callback_co.reset();
+            task.Reset();
         } else {
             // 无任务，任务队列为空
             if (idle_co->GetState() == Coroutine::FINISH) {

@@ -3,7 +3,7 @@
 
 #include <iostream>
 
-#define LOG std::cout << "[LOG] "
+#define LOG std::cout << "[INFO] "
 #define LOG_ERROR std::cerr << "[ERROR] "
 
 #endif /* UTIL_H_ */

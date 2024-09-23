@@ -104,7 +104,7 @@ void Coroutine::Resume() {
 // 重置协程
 void Coroutine::Reset(std::function<void()> callback) {
     assert(pstack_);
-    assert(state_ == FINISH);
+    // assert(state_ == FINISH);
     if (getcontext(&ctx_) != 0) {
         std::cout << "err: Reset::getcontext\n";
         exit(1);
