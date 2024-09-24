@@ -149,9 +149,9 @@ void Scheduler::Run() {
                     tickle = true;
                     continue;
                 }
-                if (iter->coroutine_ && iter->coroutine_->GetState() == Coroutine::RUNNING) {
-                    ++iter;
-                    continue;
+                if (iter->coroutine_ && iter->coroutine_->GetState() != Coroutine::READY) {
+                    LOG << "Coroutine task's state should be READY!\n";
+                    assert(false);
                 }
                 task = *iter;
                 tasks_.erase(iter++);
