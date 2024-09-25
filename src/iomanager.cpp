@@ -20,7 +20,7 @@
 #include "scheduler.h"
 #include "util.h"
 
-FdContext::EventContext& FdContext::GetEventContext(Event& e) {
+IOManager::FdContext::EventContext& IOManager::FdContext::GetEventContext(Event& e) {
     switch (e) {
         case Event::READ:
             return read_ctx;
@@ -32,14 +32,14 @@ FdContext::EventContext& FdContext::GetEventContext(Event& e) {
     }
 }
 
-void FdContext::ResetEventContext(EventContext& ectx) {
+void IOManager::FdContext::ResetEventContext(EventContext& ectx) {
     ectx.scheduler = nullptr;
     ectx.callback = nullptr;
     ectx.coroutine.reset();
 }
 
 // 根据读写事件来添加FdContext对应的任务
-void FdContext::TriggerEvent(Event e) {
+void IOManager::FdContext::TriggerEvent(Event e) {
     assert(events & e);
     // 清除事件e
     events = (Event) (events & ~e);

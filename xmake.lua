@@ -26,3 +26,7 @@ target("test_timer")
 target("test_hook_sleep")
     set_kind("binary")
     add_files("test/test_hook_sleep.cpp")
+
+target("test_hook_socket")
+    set_kind("binary")
+    add_files("test/test_hook_socket.cpp")

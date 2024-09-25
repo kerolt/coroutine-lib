@@ -21,27 +21,6 @@ enum Event {
     WRITE = EPOLLOUT,
 };
 
-// socket fd 上下文
-struct FdContext {
-    struct EventContext {
-        Scheduler* scheduler = nullptr;
-        Coroutine::Ptr coroutine;
-        std::function<void()> callback;
-    };
-
-    // 根据类型获取对应的上下文
-    EventContext& GetEventContext(Event& e);
-
-    void ResetEventContext(EventContext& ectx);
-
-    void TriggerEvent(Event e);
-
-    EventContext read_ctx, write_ctx;
-    int fd;
-    Event events = Event::NONE;
-    std::mutex mutex;
-};
-
 // IO协程调度
 class IOManager : public Scheduler, public TimerManager {
 public:
@@ -69,6 +48,28 @@ protected:
     bool IsStop() override;
 
     void ResizeContexts(size_t size);
+
+private:
+    // socket fd 上下文
+    struct FdContext {
+        struct EventContext {
+            Scheduler* scheduler = nullptr;
+            Coroutine::Ptr coroutine;
+            std::function<void()> callback;
+        };
+
+        // 根据类型获取对应的上下文
+        EventContext& GetEventContext(Event& e);
+
+        void ResetEventContext(EventContext& ectx);
+
+        void TriggerEvent(Event e);
+
+        EventContext read_ctx, write_ctx;
+        int fd;
+        Event events = Event::NONE;
+        std::mutex mutex;
+    };
 
 private:
     int epfd_;
